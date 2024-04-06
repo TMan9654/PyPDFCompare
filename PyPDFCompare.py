@@ -301,10 +301,10 @@ class CompareThread(QThread):
                 elif option == "-dpi" and value.isdigit():
                     settings["DPI_LEVEL"] = int(value)
 
-                elif (option == "-o" or option) == "--output" and path.exists(value):
+                elif (option == "-o" or option == "--output") and path.exists(value):
                     settings["OUTPUT_PATH"] = value
 
-                elif (option == "-s" or option) == "--scale" and (value == "True" or value == "False"):
+                elif (option == "-s" or option == "--scale") and (value == "True" or value == "False"):
                     if value == "True":
                         settings["SCALE_OUTPUT"] = True
                     else:
@@ -314,7 +314,7 @@ class CompareThread(QThread):
                         settings["OUTPUT_BW"] = True
                     else:
                         settings["OUTPUT_BW"] = False
-                elif (option == "-gs" or option == "--graysclae") and (value == "True" or value == "False"):
+                elif (option == "-gs" or option == "--grayscale") and (value == "True" or value == "False"):
                     if value == "True":
                         settings["OUTPUT_GS"] = True
                     else:
@@ -334,7 +334,7 @@ class CompareThread(QThread):
 
 def main():
     """
-    python comparison_engine.py [options] FilePath1 FilePath2
+    python PyPDFCompare.py [options] FilePath1 FilePath2
     options:
     -ps:pagesize, --page_size:pagesize  Ex: -ps:AUTO
         Sets the page size of the comparison file
@@ -372,7 +372,7 @@ def main():
         Default: True
     
     -mp:page, --main_page:page  Ex: -mp:NEW
-        Sets the main focus page to either the newer or older document
+        Sets the main focus page to either FilePath1 (NEW) or FilePath2 (OLD)
         Default: NEW
         Options:
             NEW
