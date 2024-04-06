@@ -207,7 +207,7 @@ class CompareThread(QThread):
 
             self.logMessage.emit("Creating temporary directory...")
             with TemporaryDirectory() as temp_dir:
-                self.logMessage.emit(f"Temporary directory created: {temp_dir}.")
+                self.logMessage.emit(f"Temporary directory created.") #: {temp_dir}
                 image_files = []
 
                 for i in range(total_operations):
