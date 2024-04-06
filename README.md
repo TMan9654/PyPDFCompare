@@ -1,8 +1,8 @@
 ## `PyPDFCompare` Command-Line Options
 
-Use `pdf_compare` followed by the options and file paths to compare two PDF files.
+Use `PyPDFCompare` followed by the options and file paths to compare two PDF files.
 
-pdf_compare [options] FilePath1 FilePath2
+PyPDFCompare [options] FilePath1 FilePath2
 
 
 ### Options
