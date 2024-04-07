@@ -15,7 +15,7 @@ from PySide6.QtWidgets import QMainWindow, QProgressBar, QApplication, QWidget, 
 class ProgressWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("FreeCommander Comparison")
+        self.setWindowTitle("PyPDFCompare")
         self.resize(600, 500)
         
         self.centralWidget = QWidget()
@@ -207,7 +207,7 @@ class CompareThread(QThread):
 
             self.logMessage.emit("Creating temporary directory...")
             with TemporaryDirectory() as temp_dir:
-                self.logMessage.emit(f"Temporary directory created.") #: {temp_dir}
+                self.logMessage.emit(f"Temporary directory created: {temp_dir}")
                 image_files = []
 
                 for i in range(total_operations):
