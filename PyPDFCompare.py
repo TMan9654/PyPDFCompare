@@ -79,6 +79,7 @@ class CompareThread(QThread):
         self.INCLUDE_IMAGES = compare_settings.get("INCLUDE_IMAGES")
         self.MAIN_PAGE= compare_settings.get("MAIN_PAGE")
         self.THRESHOLD = compare_settings.get("THRESHOLD")
+        self.MERGE_THRESHOLD = int(self.DPI_LEVEL / 100 * self.PAGE_SIZE[0] * self.PAGE_SIZE[1]) if self.PAGE_SIZE[0] and self.PAGE_SIZE[1] else None
         self.MIN_AREA = compare_settings.get("MIN_AREA")
         self.EPSILON = compare_settings.get("EPSILON")
         self.OUTPUT_PATH = compare_settings.get("OUTPUT_PATH")
@@ -107,29 +108,49 @@ class CompareThread(QThread):
                 self.logMessage.emit("Comparison", "Page sizes don't match and the 'Scale Pages' setting is off, attempting to match page sizes... results may be inaccurate.")
             image1array = array(image1)
             image2array = array(image2)
-            image1array[all(image1array != [255, 255, 255], axis=-1)] = [255, 0, 0]
-            overlay_image = Image.fromarray(where(all(image2array == [255, 255, 255], axis=-1, keepdims=True), image1array, image2array))
+            image2array[~all(image2array == [255, 255, 255], axis=-1)] = [255, 0, 0] # Convert non-white pixels in image2array to red for overlay.
+            overlay_image = Image.fromarray(where(all(image1array == [255, 255, 255], axis=-1, keepdims=True), image2array, image1array))
             del image1array, image2array
             
         # Markup Image / Differences Image
         if self.INCLUDE_IMAGES["Markup"] is True or self.INCLUDE_IMAGES["Difference"] is True:
-            diff_image = Image.fromarray(where(all(array(ImageOps.colorize(ImageOps.invert(ImageChops.subtract(image1, image2).convert("L")), black="blue", white="white").convert("RGB")) == [255, 255, 255], axis=-1)[:,:,None], array(ImageOps.colorize(ImageOps.invert(ImageChops.subtract(image2, image1).convert("L")), black="red", white="white").convert("RGB")), array(ImageOps.colorize(ImageOps.invert(ImageChops.subtract(image1, image2).convert("L")), black="blue", white="white").convert("RGB"))))
+            diff_image = Image.fromarray(where(all(array(ImageOps.colorize(ImageOps.invert(ImageChops.subtract(image2, image1).convert("L")), black="blue", white="white").convert("RGB")) == [255, 255, 255], axis=-1)[:,:,None], array(ImageOps.colorize(ImageOps.invert(ImageChops.subtract(image1, image2).convert("L")), black="red", white="white").convert("RGB")), array(ImageOps.colorize(ImageOps.invert(ImageChops.subtract(image2, image1).convert("L")), black="blue", white="white").convert("RGB"))))
             if self.INCLUDE_IMAGES["Markup"] is True:
-                contours, _ = findContours(threshold(array(ImageChops.difference(image1, image2).convert("L")), self.THRESHOLD, 255, THRESH_BINARY)[1], RETR_EXTERNAL, CHAIN_APPROX_SIMPLE)
+                contours, _ = findContours(threshold(array(ImageChops.difference(image2, image1).convert("L")), self.THRESHOLD, 255, THRESH_BINARY)[1], RETR_EXTERNAL, CHAIN_APPROX_SIMPLE)
                 del _
                 marked_image = Image.new("RGBA", image1.size, (255, 0, 0, 255))
-                marked_image.paste(image2, (0, 0))
+                marked_image.paste(image1, (0, 0))
                 marked_image_draw = ImageDraw.Draw(marked_image)
+                existing_boxes = []
+
                 for contour in contours:
                     approx = approxPolyDP(contour, (self.EPSILON + 0.0000000001) * arcLength(contour, False), False)
                     marked_image_draw.line(tuple(map(tuple, array(approx).reshape((-1, 2)).astype(int32))), fill=(255, 0, 0, 255), width=int(self.DPI_LEVEL/100))
-                    if contourArea(contour) > self.MIN_AREA:
-                        x, y, w, h = boundingRect(approx)
-                        diff_box = Image.new("RGBA", (w, h), (0, 255, 0, 64))
-                        ImageDraw.Draw(diff_box).rectangle([(0, 0), (w - 1, h - 1)], outline=(255, 0, 0, 255))
-                        marked_image.paste(diff_box, (x, y), mask=diff_box)
-                        del diff_box, x, y, w, h
-                    del approx
+
+                    if self.MIN_AREA < contourArea(contour):
+                        x, y, w, h = boundingRect(contour)
+                        new_box = (x, y, x + w, y + h)
+
+                        # Merge with an existing box if close enough, else add as a new box
+                        merged = False
+                        for i, existing_box in enumerate(existing_boxes):
+                            # Define a threshold for how close boxes should be to consider merging
+                            if (max(new_box[0], existing_box[0]) - min(new_box[2], existing_box[2]) <= self.MERGE_THRESHOLD and max(new_box[1], existing_box[1]) - min(new_box[3], existing_box[3]) <= self.MERGE_THRESHOLD):
+                                # Merge the boxes by taking the min/max of their coordinates
+                                merged_box = (min(new_box[0], existing_box[0]), min(new_box[1], existing_box[1]), max(new_box[2], existing_box[2]), max(new_box[3], existing_box[3]))
+                                existing_boxes[i] = merged_box  # Update the existing box with the merged one
+                                merged = True
+                                break
+                        
+                        if not merged:
+                            existing_boxes.append(new_box)
+
+                # After processing all contours, draw the boxes
+                for box in existing_boxes:
+                    diff_box = Image.new("RGBA", (box[2]-box[0], box[3]-box[1]), (0, 255, 0, 64))
+                    ImageDraw.Draw(diff_box).rectangle([(0, 0), (box[2]-box[0] - 1, box[3]-box[1] - 1)], outline=(255, 0, 0, 255), width=int(self.DPI_LEVEL/100))
+                    marked_image.paste(diff_box, (box[0], box[1]), mask=diff_box)
+
                 del contours, marked_image_draw
         output = []
         if self.SCALE_OUTPUT is False:
@@ -156,7 +177,7 @@ class CompareThread(QThread):
                 output.append(overlay_image)
         return output
     
-    def pdf_to_image(self, page_number: int, doc: fitz.Document) -> Image:
+    def pdf_to_image(self, page_number: int, doc: fitz.Document) -> Image.Image:
         if page_number < doc.page_count:
             pix = doc.load_page(page_number).get_pixmap(dpi=self.DPI_LEVEL)
             image = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
@@ -167,20 +188,6 @@ class CompareThread(QThread):
         if self.SCALE_OUTPUT is True:
             image = image.resize((int(self.PAGE_SIZE[0] * self.DPI_LEVEL), int(self.PAGE_SIZE[1] * self.DPI_LEVEL)))
         return image
-
-    def sort_files(self, files: list[str]) -> list[str]:
-        sorted_files = []
-        previous_file = None
-        for file in files:
-            file = file.split("\\")[-1]
-            if previous_file is not None:
-                if len(file) > len(previous_file):
-                    sorted_files.append(file)
-                    sorted_files.append(previous_file)
-                else:
-                    sorted_files = sorted(files)
-            previous_file = file
-        return sorted_files
 
     def handle_files(self, files: list[str]) -> str:
         self.logMessage.emit(f"""Processing files:
@@ -194,11 +201,11 @@ class CompareThread(QThread):
             if self.PAGE_SIZE[0] is None:
                 # Assume 72 DPI for original document resolution
                 self.PAGE_SIZE = (size.width / 72, size.height / 72)
-            files = self.sort_files(files)
-            filename = files[1 if self.MAIN_PAGE == "NEW" else 0].split("/")[-1]
+                self.MERGE_THRESHOLD = int(self.DPI_LEVEL / 120 * self.PAGE_SIZE[0] * self.PAGE_SIZE[1])
+            filename = files[0 if self.MAIN_PAGE == "NEW" else 1].split("/")[-1]
             source_path = False
             if self.OUTPUT_PATH is None:
-                self.OUTPUT_PATH = files[1].replace(filename, "")
+                self.OUTPUT_PATH = files[0].replace(filename, "")
                 source_path = True
             
             total_operations = max(doc1.page_count, doc2.page_count)
