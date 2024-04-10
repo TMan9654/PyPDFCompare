@@ -14,7 +14,7 @@ A python based command line PDF comparison tool.
 
 The markup page is the main page with outlines  around any changes and some boxes to highlight "larger changes".
 
-![Markup](./Demo/Images/DWG1_Comparison_Markup.jpg "Markup")
+![Markup](./Demo/Images/BCKDCK_A-R1_Comparison_Markup.jpg "Markup")
 
 The differences page is essentially the main page - the secondary page. Any changes that were "removed" since the previous version end up in red and anything that was "added" is in blue.
 
