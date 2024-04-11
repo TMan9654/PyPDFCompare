@@ -1,0 +1,63 @@
+{
+    "PAGE_SIZES": {
+        "AUTO": [
+            null,
+            null
+        ],
+        "LETTER": [
+            8.5,
+            11
+        ],
+        "ANSI A": [
+            11,
+            8.5
+        ],
+        "ANSI B": [
+            17,
+            11
+        ],
+        "ANSI C": [
+            22,
+            17
+        ],
+        "ANSI D": [
+            34,
+            22
+        ]
+    },
+    "DPI_LEVELS": [
+        75,
+        150,
+        300,
+        600,
+        1200,
+        1800
+    ],
+    "DPI_LABELS": [
+        "Low DPI: Draft Quality [75]",
+        "Low DPI: Viewing Only [150]",
+        "Medium DPI: Printable [300]",
+        "Standard DPI [600]",
+        "High DPI [1200]: Professional Quality",
+        "Max DPI [1800]: Large File Size"
+    ],
+    "INCLUDE_IMAGES": {
+        "New Copy": false,
+        "Old Copy": false,
+        "Markup": true,
+        "Difference": true,
+        "Overlay": true
+    },
+    "DPI": "Standard DPI [600]",
+    "DPI_LEVEL": 600,
+    "PAGE_SIZE": "AUTO",
+    "THRESHOLD": 128,
+    "MIN_AREA": 100,
+    "EPSILON": 0.0,
+    "OUTPUT_PATH": null,
+    "SCALE_OUTPUT": true,
+    "OUTPUT_BW": false,
+    "OUTPUT_GS": false,
+    "REDUCE_FILESIZE": true,
+    "MAIN_PAGE": "New Document"
+}
