@@ -703,6 +703,12 @@ class CompareThread(QThread):
         self.REDUCE_FILESIZE = compare_settings.get("REDUCE_FILESIZE")
         self.files = files
         self.progress_window = progress_window
+        self.statistics = {
+            "NUM_PAGES": 0,
+            "MAIN_PAGE": None,
+            "TOTAL_DIFFERENCES": 0,
+            "PAGES_WITH_DIFFERENCES": []
+            }
         
         self.progressUpdated.connect(self.progress_window.update_progress)
         self.logMessage.connect(self.progress_window.update_log)
@@ -714,7 +720,7 @@ class CompareThread(QThread):
         except fitz.fitz.FileDataError as e:
             self.logMessage.emit(f"Error opening file: {e}")
 
-    def mark_differences(self, image1: Image.Image, image2: Image.Image) -> list[Image.Image]:
+    def mark_differences(self, page_num: int, image1: Image.Image, image2: Image.Image) -> list[Image.Image]:
         # Overlay Image
         if self.INCLUDE_IMAGES["Overlay"] is True:
             if image1.size != image2.size:
@@ -764,30 +770,34 @@ class CompareThread(QThread):
                     diff_box = Image.new("RGBA", (box[2]-box[0], box[3]-box[1]), (0, 255, 0, 64))
                     ImageDraw.Draw(diff_box).rectangle([(0, 0), (box[2]-box[0] - 1, box[3]-box[1] - 1)], outline=(255, 0, 0, 255), width=int(self.DPI_LEVEL/100))
                     marked_image.paste(diff_box, (box[0], box[1]), mask=diff_box)
-
                 del contours, marked_image_draw
+                if len(existing_boxes):
+                    self.statistics["TOTAL_DIFFERENCES"] += len(existing_boxes)
+                    self.statistics["PAGES_WITH_DIFFERENCES"].append((page_num, len(existing_boxes)))
+
+        # Output
         output = []
-        if self.SCALE_OUTPUT is False:
-            if self.INCLUDE_IMAGES["New Copy"] is True:
+        if not self.SCALE_OUTPUT:
+            if self.INCLUDE_IMAGES["New Copy"]:
                 output.append(image1.resize((int(self.PAGE_SIZE[0] * self.DPI_LEVEL), int(self.PAGE_SIZE[1] * self.DPI_LEVEL))) if self.MAIN_PAGE == "New Document" else image2.resize((int(self.PAGE_SIZE[0] * self.DPI_LEVEL), int(self.PAGE_SIZE[1] * self.DPI_LEVEL))))
-            if self.INCLUDE_IMAGES["Old Copy"] is True:
+            if self.INCLUDE_IMAGES["Old Copy"]:
                 output.append(image2.resize((int(self.PAGE_SIZE[0] * self.DPI_LEVEL), int(self.PAGE_SIZE[1] * self.DPI_LEVEL))) if self.MAIN_PAGE == "New Document" else image1.resize((int(self.PAGE_SIZE[0] * self.DPI_LEVEL), int(self.PAGE_SIZE[1] * self.DPI_LEVEL))))
-            if self.INCLUDE_IMAGES["Markup"] is True:
+            if self.INCLUDE_IMAGES["Markup"]:
                 output.append(marked_image.resize((int(self.PAGE_SIZE[0] * self.DPI_LEVEL), int(self.PAGE_SIZE[1] * self.DPI_LEVEL))))
-            if self.INCLUDE_IMAGES["Difference"] is True:
+            if self.INCLUDE_IMAGES["Difference"]:
                 output.append(diff_image.resize((int(self.PAGE_SIZE[0] * self.DPI_LEVEL), int(self.PAGE_SIZE[1] * self.DPI_LEVEL))))
-            if self.INCLUDE_IMAGES["Overlay"] is True:
+            if self.INCLUDE_IMAGES["Overlay"]:
                 output.append(overlay_image.resize((int(self.PAGE_SIZE[0] * self.DPI_LEVEL), int(self.PAGE_SIZE[1] * self.DPI_LEVEL))))
         else:
-            if self.INCLUDE_IMAGES["New Copy"] is True:
+            if self.INCLUDE_IMAGES["New Copy"]:
                 output.append(image1 if self.MAIN_PAGE == "New Document" else image2)
-            if self.INCLUDE_IMAGES["Old Copy"] is True:
+            if self.INCLUDE_IMAGES["Old Copy"]:
                 output.append(image2 if self.MAIN_PAGE == "New Document" else image1)
-            if self.INCLUDE_IMAGES["Markup"] is True:
+            if self.INCLUDE_IMAGES["Markup"]:
                 output.append(marked_image)
-            if self.INCLUDE_IMAGES["Difference"] is True:
+            if self.INCLUDE_IMAGES["Difference"]:
                 output.append(diff_image)
-            if self.INCLUDE_IMAGES["Overlay"] is True:
+            if self.INCLUDE_IMAGES["Overlay"]:
                 output.append(overlay_image)
         return output
     
@@ -816,6 +826,7 @@ class CompareThread(QThread):
                 # Assume 72 DPI for original document resolution
                 self.PAGE_SIZE = (size.width / 72, size.height / 72)
                 self.MERGE_THRESHOLD = int(self.DPI_LEVEL / 120 * self.PAGE_SIZE[0] * self.PAGE_SIZE[1])
+            self.statistics["MAIN_PAGE"] = files[0 if self.MAIN_PAGE == "New Document" else 1]
             filename = files[0 if self.MAIN_PAGE == "New Document" else 1].split("/")[-1]
             source_path = False
             if self.OUTPUT_PATH is None:
@@ -830,6 +841,8 @@ class CompareThread(QThread):
             with TemporaryDirectory() as temp_dir:
                 self.logMessage.emit(f"Temporary directory created: {temp_dir}")
                 image_files = []
+                stats_filename = path.join(temp_dir, "stats.pdf")
+                image_files.append(stats_filename)
 
                 for i in range(total_operations):
                     self.logMessage.emit(f"Processing page {i+1} of {total_operations}...")
@@ -838,7 +851,7 @@ class CompareThread(QThread):
                     self.logMessage.emit(f"Converting secondary page...")
                     image2 = self.pdf_to_image(i, doc2)
                     self.logMessage.emit(f"Marking differences...")
-                    markups = self.mark_differences(image1, image2)
+                    markups = self.mark_differences(i, image1, image2)
                     del image1, image2
 
                     # Save marked images and prepare TOC entries
@@ -858,6 +871,28 @@ class CompareThread(QThread):
 
                     current_progress += progress_per_operation
                     self.progressUpdated.emit(int(current_progress))
+
+                # Create statistics page
+                text = f"Document Comparison Report\n\nTotal Pages: {total_operations}\nFiles Compared:\n    {files[0]}\n    {files[1]}\nMain Page: {self.statistics['MAIN_PAGE']}\nTotal Differences: {self.statistics['TOTAL_DIFFERENCES']}\nPages with differences:\n"
+                for page_info in self.statistics["PAGES_WITH_DIFFERENCES"]:
+                    text += f"    Page {page_info[0]+1} Changes: {page_info[1]}\n"
+
+                # Create statistics page and handle text overflow
+                stats_doc = fitz.open()
+                stats_page = stats_doc.new_page()
+                text_blocks = text.split('\n')
+                y_position = 72
+                for line in text_blocks:
+                    if y_position > fitz.paper_size('letter')[1] - 72:
+                        stats_page = stats_doc.new_page()  # Create a new page if needed
+                        y_position = 72  # Reset y position for the new page
+                    stats_page.insert_text((72, y_position), line, fontsize=11, fontname="helv")
+                    y_position += 12  # Adjust y_position by the line height
+
+                # Save and close the stats document
+                stats_filename = path.join(temp_dir, "stats.pdf")
+                stats_doc.save(stats_filename)
+                stats_doc.close()
 
                 # Builds final PDF from each PDF image page
                 self.logMessage.emit("Compiling PDF from output folder...")
