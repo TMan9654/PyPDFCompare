@@ -1,0 +1,14 @@
+[project]
+name = "pypdfcompare"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "numpy>=2.3.0",
+    "opencv-python>=4.11.0.86",
+    "pillow>=11.2.1",
+    "pymupdf>=1.26.0",
+    "pyside6>=6.9.1",
+    "scikit-learn>=1.7.0",
+]
