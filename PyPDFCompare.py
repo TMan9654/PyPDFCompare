@@ -478,7 +478,7 @@ def main():
     if path.exists(paths[0]) and path.exists(paths[1]) and len(paths) == 2:
         _, ext1 = path.splitext(paths[0])
         _, ext2 = path.splitext(paths[1])
-        if ext1 == ".pdf" or ext2 == ".pdf":
+        if ext1.lower() == ".pdf" or ext2.lower() == ".pdf":
             app = QApplication()
             progress_window = ProgressWindow()
             progress_window.show()
